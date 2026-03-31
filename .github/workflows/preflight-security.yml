@@ -183,11 +183,9 @@ jobs:
           fetch-depth: 0
 
       - name: Run TruffleHog
-        uses: trufflesecurity/trufflehog@v3.93.8
+        uses: trufflesecurity/trufflehog@v3.94.1
         with:
-          extra_args: >-
-            --only-verified
-            --no-update
+          extra_args: --only-verified
 
   sast-hadolint:
     name: sast:hadolint (Dockerfile)
@@ -300,6 +298,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create SCA_REPORT_DIR
+        run: mkdir -p ${{ env.SCA_REPORT_DIR }}
+
       - name: Cache Trivy DB
         uses: actions/cache@v4
         with:
@@ -334,6 +335,9 @@ jobs:
     continue-on-error: true # warn, don't block - equivalent to allow_failure: true
     steps:
       - uses: actions/checkout@v4
+
+      - name: Create SCA_REPORT_DIR
+        run: mkdir -p ${{ env.SCA_REPORT_DIR }}
 
       - name: Cache Trivy DB
         uses: actions/cache@v4
@@ -378,6 +382,9 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
+
+      - name: Create SCA_REPORT_DIR
+        run: mkdir -p ${{ env.SCA_REPORT_DIR }}
 
       - name: Cache Trivy DB
         uses: actions/cache@v4
