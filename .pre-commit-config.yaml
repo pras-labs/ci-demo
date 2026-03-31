@@ -20,8 +20,8 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1000]
-      # - id: no-commit-to-branch
-      #   args: [--branch, main, --branch, master]
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master]
 
   # -- Dockerfile ------------------------------
   - repo: https://github.com/hadolint/hadolint
