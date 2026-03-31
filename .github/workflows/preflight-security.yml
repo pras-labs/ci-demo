@@ -53,10 +53,15 @@ jobs:
       # mise reads .mise.toml and installs all pinned tools (go, python, node,
       # gitleaks, hadolint, trivy, cosign, etc.) - equivalent to the devcontainer.
       # This is the GitHub Actions equivalent of the GitLab <<: *use-devenv anchor.
+      # GITHUB_TOKEN is required to avoid 403 rate limit errors when mise downloads
+      # tools via the aqua backend (GitHub Releases API: 60 req/hr unauthenticated
+      # vs 5000 req/hr authenticated). Shared runner IPs exhaust the limit quickly.
       - uses: jdx/mise-action@v2
         with:
           install: true
           cache: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache pre-commit envs
         uses: actions/cache@v4
@@ -84,6 +89,8 @@ jobs:
         with:
           install: true
           cache: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install npm deps
         run: npm ci --ignore-scripts
@@ -109,7 +116,7 @@ jobs:
         run: bash .devcontainer/check-branch.sh
 
   # ===========================================================
-  # SECURITY - SAST + SCA (parallel, all events)
+  # SECURITY: SAST + SCA (parallel, all events)
   # Equivalent to GitLab security stage, all behind preflight-secrets gate.
   # ===========================================================
 
