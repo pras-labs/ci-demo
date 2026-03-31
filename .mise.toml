@@ -1,0 +1,18 @@
+[tools]
+go = "1.25"
+python = "3.12"
+node = "22"
+uv = "latest"
+
+# Security/lint tools via aqua backend (GitHub releases)
+"aqua:golangci/golangci-lint" = "2.1.6"
+"aqua:gitleaks/gitleaks" = "8.30.0"
+"aqua:hadolint/hadolint" = "2.14.0"
+"aqua:aquasecurity/trivy" = "0.69.3"
+"aqua:trufflesecurity/trufflehog" = "3.93.8"
+"aqua:sigstore/cosign" = "3.0.5"
+
+# pip tools
+"pipx:pre-commit" = "latest"
+"pipx:bandit" = "latest"
+"pipx:checkov" = "latest"

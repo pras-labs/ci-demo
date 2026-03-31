@@ -1,0 +1,19 @@
+title = "ci-demo gitleaks config"
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  '''.gitleaks.toml''',
+  '''tests/fixtures/''',
+  '''\.pre-commit-config\.yaml''',
+  '''go\.sum''',
+  '''package-lock\.json''',
+]
+regexes = ['''EXAMPLE_.*''', '''YOUR_.*_HERE''', '''REPLACE_ME''', '''changeme''']
+
+# Block common Go test patterns from triggering
+[[rules]]
+id = "go-test-fake-token"
+description = "Ignore fake tokens in test files"
+path = '''_test\.go$'''
+allowlist.regexes = ['''test.*token''', '''fake.*key''', '''dummy.*secret''']

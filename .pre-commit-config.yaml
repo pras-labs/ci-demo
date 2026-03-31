@@ -1,0 +1,112 @@
+default_stages: [pre-commit]
+
+repos:
+  # -- Secrets ---------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+
+  # -- General hygiene -------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      # - id: no-commit-to-branch
+      #   args: [--branch, main, --branch, master]
+
+  # -- Dockerfile ------------------------------
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        args: [--failure-threshold, error]
+
+  # -- Shell scripts ---------------------------
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+
+  # -- Python (adjust/remove if not Python project) --
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # -- Commit message (commit-msg hook) --------
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.24.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  # -- Git hooks -------------------------------
+  - repo: local
+    hooks:
+      # -- Formatting & linting
+      - id: go-fmt
+        name: gofmt
+        stages: [pre-commit]
+        language: system
+        entry: gofmt -l -w
+        types: [go]
+      - id: go-vet
+        name: go vet
+        stages: [pre-commit]
+        language: system
+        entry: go vet ./...
+        pass_filenames: false
+        types: [go]
+
+      # -- Commit message (commit-msg hook)
+      - id: commitlint
+        name: Lint commit message
+        stages: [commit-msg] # runs on commit-msg hook
+        language: system # use system node_modules
+        entry: npx --no-install commitlint --edit
+        pass_filenames: false # commitlint reads COMMIT_EDITMSG itself
+
+      # -- Branch naming (pre-push hook)
+      - id: branch-naming
+        name: Branch naming convention
+        stages: [pre-push]
+        language: script
+        entry: .devcontainer/check-branch.sh
+        pass_filenames: false
+
+      # -- Secret scan (pre-push hook)
+      - id: sast-secrets-prepush
+        name: Secret scan (gitleaks)
+        stages: [pre-push]
+        language: system
+        entry: gitleaks detect --source . --redact --exit-code 1
+        pass_filenames: false
+      # - id: sast-semgrep-prepush
+      #   name: Semgrep SAST
+      #   stages: [pre-push]
+      #   language: docker_image
+      #   entry: semgrep/semgrep:latest semgrep scan
+      #   args:
+      #     - --config=p/owasp-top-ten
+      #     - --config=p/secrets
+      #     - --error
+      #     - --quiet
+      #   pass_filenames: false
+      - id: sast-checkov-prepush
+        name: Checkov IaC scan
+        stages: [pre-push]
+        language: system
+        entry: bash -c 'checkov -d . --framework dockerfile,kubernetes,gitlab_ci
+          --soft-fail-on MEDIUM --hard-fail-on HIGH,CRITICAL --compact'
+        pass_filenames: false

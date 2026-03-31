@@ -1,0 +1,12 @@
+{
+  "name": "ci-demo",
+  "private": true,
+  "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0"
+  },
+  "scripts": {
+    "commitlint": "commitlint",
+    "lint:commits": "commitlint --from HEAD~1 --to HEAD --verbose"
+  }
+}

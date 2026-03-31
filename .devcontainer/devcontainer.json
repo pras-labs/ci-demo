@@ -1,0 +1,61 @@
+{
+  "name": "Secure CI Dev Environment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/share/mise/shims:/home/vscode/.local/bin:${containerEnv:PATH}",
+    "NPM_CONFIG_CACHE": "${containerWorkspaceFolder}/.cache/npm"
+  },
+  "mounts": [
+    "source=precommit-cache,target=/home/vscode/.cache/pre-commit,type=volume",
+    "source=npm-cache,target=/home/vscode/.npm,type=volume"
+  ],
+  "postCreateCommand": "git config --global --add safe.directory ${containerWorkspaceFolder} && bash .devcontainer/setup.sh",
+  "postStartCommand": "pre-commit run --all-files 2>/dev/null || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "timonwong.shellcheck",
+        "hashicorp.terraform",
+        "ms-azuretools.vscode-docker",
+        "gitlab.gitlab-workflow",
+        "streetsidesoftware.code-spell-checker",
+        "eamodio.gitlens",
+        "semgrep.semgrep",
+        "esbenp.prettier-vscode",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.rulers": [
+          88,
+          120
+        ],
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        },
+        "[go]": {
+          "editor.defaultFormatter": "golang.go",
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        "[yaml]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[dockerfile]": {
+          "editor.defaultFormatter": "ms-azuretools.vscode-docker"
+        }
+      }
+    }
+  },
+  "forwardPorts": [],
+  "portsAttributes": {}
+}
