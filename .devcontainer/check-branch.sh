@@ -2,16 +2,30 @@
 set -euo pipefail
 
 # -- Resolve branch name -------------------------------------
-# In GitLab CI MR pipelines, git is in detached HEAD state.
-# Use CI env vars instead of git rev-parse.
+# Both GitLab CI MR and GitHub Actions PR pipelines run in detached
+# HEAD state: git rev-parse --abbrev-ref HEAD returns "HEAD", not the
+# branch name. Use platform-specific env vars to get the real branch.
+#
+# Priority order:
+#   1. GitLab CI MR  - CI_MERGE_REQUEST_SOURCE_BRANCH_NAME
+#   2. GitLab CI push/tag - CI_COMMIT_REF_NAME
+#   3. GitHub Actions PR - GITHUB_HEAD_REF (source branch of the PR)
+#   4. GitHub Actions push/tag - GITHUB_REF_NAME
+#   5. Local fallback - git rev-parse (only works outside detached HEAD)
 if [ -n "${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-}" ]; then
-  # MR pipeline — use the source branch name
+  # GitLab CI: MR pipeline - source branch of the merge request
   BRANCH="$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
 elif [ -n "${CI_COMMIT_REF_NAME:-}" ]; then
-  # Push pipeline — use the ref name
+  # GitLab CI: push/tag pipeline
   BRANCH="$CI_COMMIT_REF_NAME"
+elif [ -n "${GITHUB_HEAD_REF:-}" ]; then
+  # GitHub Actions: PR pipeline - head branch of the pull request
+  BRANCH="$GITHUB_HEAD_REF"
+elif [ -n "${GITHUB_REF_NAME:-}" ]; then
+  # GitHub Actions: push/tag pipeline
+  BRANCH="$GITHUB_REF_NAME"
 else
-  # Local (non-CI) — fall back to git
+  # Local (non-CI) - fall back to git
   BRANCH=$(git rev-parse --abbrev-ref HEAD)
 fi
 
