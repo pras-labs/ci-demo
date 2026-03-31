@@ -1,0 +1,416 @@
+name: Preflight & Security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+# Cancel in-progress runs for the same ref (equivalent to interruptible: true)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SAST_REPORT_DIR: reports/sast
+  SCA_REPORT_DIR: reports/sca
+  # Enforce build reproducibility rules
+  GOFLAGS: -mod=readonly
+  NPM_CONFIG_FUND: "false"
+  NPM_CONFIG_AUDIT: "false"
+  NPM_CONFIG_LEGACY_PEER_DEPS: "true"
+
+jobs:
+  # ===========================================================
+  # PREFLIGHT - secrets (all events) + lint/commitlint/branch (PR only)
+  # ===========================================================
+
+  preflight-secrets:
+    name: preflight:secrets (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for gitleaks
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  preflight-lint:
+    name: preflight:lint (pre-commit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Only on PRs - equivalent to .on-mr-only
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Cache pre-commit envs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml', '.mise.toml') }}
+
+      - name: Install npm deps (commitlint)
+        run: npm ci --ignore-scripts
+
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  preflight-commitlint:
+    name: preflight:commitlint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install npm deps
+        run: npm ci --ignore-scripts
+
+      - name: Lint commit messages
+        run: |
+          npx --no-install commitlint \
+            --from origin/${{ github.base_ref }} \
+            --to HEAD \
+            --verbose
+
+  preflight-branch-name:
+    name: preflight:branch-name
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check branch naming convention
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: bash .devcontainer/check-branch.sh
+
+  # ===========================================================
+  # SECURITY - SAST + SCA (parallel, all events)
+  # Equivalent to GitLab security stage, all behind preflight-secrets gate.
+  # ===========================================================
+
+  sast-semgrep:
+    name: sast:semgrep
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [preflight-secrets]
+    container:
+      image: semgrep/semgrep:1.108.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Semgrep (diff on PR, full on push/release)
+        env:
+          SEMGREP_RULES: >-
+            p/owasp-top-ten
+            p/secrets
+            p/ci
+            p/dockerfile
+            p/kubernetes
+        run: |
+          mkdir -p ${{ env.SAST_REPORT_DIR }}
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Scan only changed files on PR
+            git fetch origin ${{ github.base_ref }}
+            SCAN_TARGET=$(git diff --name-only origin/${{ github.base_ref }}..HEAD || echo ".")
+            echo "🔎 Scanning changed files: $SCAN_TARGET"
+          else
+            SCAN_TARGET="."
+          fi
+          semgrep scan \
+            --json-output ${{ env.SAST_REPORT_DIR }}/semgrep.json \
+            --sarif-output ${{ env.SAST_REPORT_DIR }}/semgrep.sarif \
+            --error \
+            $SCAN_TARGET
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ env.SAST_REPORT_DIR }}/semgrep.sarif
+          category: semgrep
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-semgrep
+          path: ${{ env.SAST_REPORT_DIR }}/semgrep.sarif
+          retention-days: 7
+
+  sast-trufflehog:
+    name: sast:trufflehog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [preflight-secrets]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@v3.93.8
+        with:
+          extra_args: >-
+            --only-verified
+            --fail
+            --no-update
+
+  sast-hadolint:
+    name: sast:hadolint (Dockerfile)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [preflight-secrets]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          ignore: DL3007
+          failure-threshold: error
+          format: sarif
+          output-file: ${{ env.SAST_REPORT_DIR }}/hadolint.sarif
+          no-fail: false
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ env.SAST_REPORT_DIR }}/hadolint.sarif
+          category: hadolint
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-hadolint
+          path: ${{ env.SAST_REPORT_DIR }}/hadolint.sarif
+          retention-days: 7
+
+  sast-checkov:
+    name: sast:checkov (IaC)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [preflight-secrets]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: dockerfile,kubernetes,github_actions
+          output_format: cli,sarif
+          output_file_path: ${{ env.SAST_REPORT_DIR }}
+          skip_check: CKV_DOCKER_2,CKV_DOCKER_7
+          soft_fail_on: MEDIUM
+          hard_fail_on: HIGH,CRITICAL
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ env.SAST_REPORT_DIR }}/results_sarif.sarif
+          category: checkov
+
+  sast-bandit:
+    name: sast:bandit (Python)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [preflight-secrets]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Bandit (skip if no Python files)
+        run: |
+          mkdir -p ${{ env.SAST_REPORT_DIR }}
+          PY_FILES=$(find . -name "*.py" \
+            -not -path "./.venv/*" \
+            -not -path "./node_modules/*" \
+            -not -path "./.git/*" | head -5)
+          if [ -z "$PY_FILES" ]; then
+            echo "⚠️ No Python files found, skipping bandit"
+            exit 0
+          fi
+          pip install bandit
+          bandit \
+            --recursive \
+            --format json \
+            --output ${{ env.SAST_REPORT_DIR }}/bandit.json \
+            --severity-level medium \
+            --exclude .venv,node_modules,.git \
+            . || true
+          bandit --recursive --severity-level medium --exclude .venv,node_modules,.git .
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-bandit
+          path: ${{ env.SAST_REPORT_DIR }}/bandit.json
+          retention-days: 7
+
+  # -- SCA: runs parallel with SAST -------------------------
+
+  sca-vuln:
+    name: sca:vuln (trivy fs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [preflight-secrets]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+
+      - name: Run Trivy (filesystem vuln scan)
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          format: json
+          output: ${{ env.SCA_REPORT_DIR }}/trivy-vuln.json
+          cache-dir: ~/.cache/trivy
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sca-vuln
+          path: ${{ env.SCA_REPORT_DIR }}/trivy-vuln.json
+          retention-days: 7
+
+  sca-license:
+    name: sca:license (trivy fs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [preflight-secrets]
+    continue-on-error: true # warn, don't block - equivalent to allow_failure: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+
+      - name: Run Trivy (license scan)
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: license
+          severity: HIGH,CRITICAL
+          format: json
+          output: ${{ env.SCA_REPORT_DIR }}/trivy-license.json
+          cache-dir: ~/.cache/trivy
+          exit-code: "0"
+
+      - name: Check for restricted licenses
+        run: |
+          if grep -qE '"Category":\s*"(restricted|forbidden)"' ${{ env.SCA_REPORT_DIR }}/trivy-license.json 2>/dev/null; then
+            echo "❌ Restricted/forbidden license detected!"
+            exit 1
+          fi
+          echo "✅ No license violations found"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sca-license
+          path: ${{ env.SCA_REPORT_DIR }}/trivy-license.json
+          retention-days: 7
+
+  sca-sbom:
+    name: sca:sbom (trivy fs, cyclonedx)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [preflight-secrets]
+    # Generate SBOM on main + tags only (.on-release equivalent)
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+
+      - name: Generate SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: cyclonedx
+          output: ${{ env.SCA_REPORT_DIR }}/sbom.cdx.json
+          cache-dir: ~/.cache/trivy
+          exit-code: "0"
+
+      - name: Upload SBOM to GitHub dependency graph
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-sbom
+          path: ${{ env.SCA_REPORT_DIR }}/sbom.cdx.json
+          retention-days: 30
+
+  # -- Security gate: all SAST + SCA must pass ---------------
+  security-gate:
+    name: security:gate
+    runs-on: ubuntu-24.04
+    needs:
+      - sast-semgrep
+      - sast-trufflehog
+      - sast-hadolint
+      - sast-checkov
+      - sast-bandit
+      - sca-vuln
+    steps:
+      - run: echo "✅ Security gate passed - all SAST + SCA checks complete"
