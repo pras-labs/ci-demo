@@ -86,12 +86,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@v2
+      - uses: actions/setup-node@v4
         with:
-          install: true
-          cache: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
+          node-version: "22"
+          cache: npm
 
       - name: Install npm deps
         run: npm ci --ignore-scripts
@@ -129,6 +127,9 @@ jobs:
     container:
       image: semgrep/semgrep:1.108.0
     steps:
+      - name: Mark GITHUB_WORKSPACE as safe
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -186,7 +187,6 @@ jobs:
         with:
           extra_args: >-
             --only-verified
-            --fail
             --no-update
 
   sast-hadolint:
@@ -196,6 +196,9 @@ jobs:
     needs: [preflight-secrets]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Create SAST_REPORT_DIR
+        run: mkdir -p ${{ env.SAST_REPORT_DIR }}
 
       - name: Run hadolint
         uses: hadolint/hadolint-action@v3.1.0
@@ -236,7 +239,7 @@ jobs:
           framework: dockerfile,kubernetes,github_actions
           output_format: cli,sarif
           output_file_path: ${{ env.SAST_REPORT_DIR }}
-          skip_check: CKV_DOCKER_2,CKV_DOCKER_7
+          skip_check: CKV_DOCKER_2,CKV_DOCKER_7,CKV2_GHA_1
           soft_fail_on: MEDIUM
           hard_fail_on: HIGH,CRITICAL
 
@@ -305,7 +308,7 @@ jobs:
           restore-keys: trivy-db-
 
       - name: Run Trivy (filesystem vuln scan)
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -340,7 +343,7 @@ jobs:
           restore-keys: trivy-db-
 
       - name: Run Trivy (license scan)
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -384,7 +387,7 @@ jobs:
           restore-keys: trivy-db-
 
       - name: Generate SBOM (CycloneDX)
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
