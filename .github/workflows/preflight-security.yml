@@ -40,6 +40,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAK_LICENSE }}
 
   preflight-lint:
     name: preflight:lint (pre-commit)
@@ -61,7 +62,7 @@ jobs:
           install: true
           cache: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
 
       - name: Cache pre-commit envs
         uses: actions/cache@v4
@@ -90,7 +91,7 @@ jobs:
           install: true
           cache: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
 
       - name: Install npm deps
         run: npm ci --ignore-scripts
