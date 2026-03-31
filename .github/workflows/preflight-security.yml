@@ -50,22 +50,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # mise reads .mise.toml and installs all pinned tools (go, python, node,
+      # gitleaks, hadolint, trivy, cosign, etc.) - equivalent to the devcontainer.
+      # This is the GitHub Actions equivalent of the GitLab <<: *use-devenv anchor.
+      - uses: jdx/mise-action@v2
         with:
-          python-version: "3.12"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
+          install: true
           cache: true
-
-      - name: Install pre-commit
-        run: pip install pre-commit
 
       - name: Cache pre-commit envs
         uses: actions/cache@v4
@@ -89,10 +80,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: jdx/mise-action@v2
         with:
-          node-version: "22"
-          cache: npm
+          install: true
+          cache: true
 
       - name: Install npm deps
         run: npm ci --ignore-scripts
