@@ -180,7 +180,7 @@ jobs:
       id-token: write # required for keyless OIDC signing
     steps:
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4
         with:
           cosign-release: v3.0.5
 
@@ -217,7 +217,7 @@ jobs:
         run: mkdir -p ${{ env.SCA_REPORT_DIR }}
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4
         with:
           cosign-release: v3.0.5
 
@@ -276,7 +276,7 @@ jobs:
       id-token: write
     steps:
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4
         with:
           cosign-release: v3.0.5
 
