@@ -57,12 +57,11 @@ jobs:
       # GITHUB_TOKEN is required to avoid 403 rate limit errors when mise downloads
       # tools via the aqua backend (GitHub Releases API: 60 req/hr unauthenticated
       # vs 5000 req/hr authenticated). Shared runner IPs exhaust the limit quickly.
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
         with:
           install: true
           cache: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
+          github_token: ${{ secrets.MISE_GITHUB_TOKEN }}
 
       - name: Cache pre-commit envs
         uses: actions/cache@v5
