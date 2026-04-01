@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # full history for gitleaks
 
@@ -49,7 +49,7 @@ jobs:
     # Only on PRs - equivalent to .on-mr-only
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # mise reads .mise.toml and installs all pinned tools (go, python, node,
       # gitleaks, hadolint, trivy, cosign, etc.) - equivalent to the devcontainer.
@@ -65,7 +65,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
 
       - name: Cache pre-commit envs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml', '.mise.toml') }}
@@ -82,11 +82,11 @@ jobs:
     timeout-minutes: 10
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -107,7 +107,7 @@ jobs:
     timeout-minutes: 5
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check branch naming convention
         env:
@@ -124,13 +124,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: [preflight-secrets]
+    permissions:
+      security-events: read
     container:
       image: semgrep/semgrep:1.108.0
     steps:
       - name: Mark GITHUB_WORKSPACE as safe
         run: git config --global --add safe.directory $GITHUB_WORKSPACE
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -160,12 +162,12 @@ jobs:
 
       - name: Upload SARIF to GitHub Security tab
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ env.SAST_REPORT_DIR }}/semgrep.sarif
           category: semgrep
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: sast-semgrep
@@ -178,7 +180,7 @@ jobs:
     timeout-minutes: 15
     needs: [preflight-secrets]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -192,8 +194,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: [preflight-secrets]
+    permissions:
+      security-events: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create SAST_REPORT_DIR
         run: mkdir -p ${{ env.SAST_REPORT_DIR }}
@@ -210,12 +214,12 @@ jobs:
 
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ env.SAST_REPORT_DIR }}/hadolint.sarif
           category: hadolint
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: sast-hadolint
@@ -227,8 +231,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: [preflight-secrets]
+    permissions:
+      security-events: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@v12
@@ -243,7 +249,7 @@ jobs:
 
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ env.SAST_REPORT_DIR }}/results_sarif.sarif
           category: checkov
@@ -254,9 +260,9 @@ jobs:
     timeout-minutes: 10
     needs: [preflight-secrets]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -269,19 +275,20 @@ jobs:
             -not -path "./.git/*" | head -5)
           if [ -z "$PY_FILES" ]; then
             echo "⚠️ No Python files found, skipping bandit"
+            echo '{"info":"⚠️ No Python files found, skipping bandit"}' > ${{ env.SAST_REPORT_DIR }}/bandit.json
             exit 0
           fi
           pip install bandit
           bandit \
             --recursive \
             --format json \
-            --output ${{ env.SAST_REPORT_DIR }}/bandit.json \
+            --output "${{ env.SAST_REPORT_DIR }}/bandit.json" \
             --severity-level medium \
             --exclude .venv,node_modules,.git \
             . || true
           bandit --recursive --severity-level medium --exclude .venv,node_modules,.git .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: sast-bandit
@@ -296,13 +303,13 @@ jobs:
     timeout-minutes: 15
     needs: [preflight-secrets]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create SCA_REPORT_DIR
         run: mkdir -p ${{ env.SCA_REPORT_DIR }}
 
       - name: Cache Trivy DB
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
@@ -320,7 +327,7 @@ jobs:
           output: ${{ env.SCA_REPORT_DIR }}/trivy-vuln.json
           cache-dir: ~/.cache/trivy
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: sca-vuln
@@ -334,13 +341,13 @@ jobs:
     needs: [preflight-secrets]
     continue-on-error: true # warn, don't block - equivalent to allow_failure: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create SCA_REPORT_DIR
         run: mkdir -p ${{ env.SCA_REPORT_DIR }}
 
       - name: Cache Trivy DB
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
@@ -366,7 +373,7 @@ jobs:
           fi
           echo "✅ No license violations found"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: sca-license
@@ -381,13 +388,13 @@ jobs:
     # Generate SBOM on main + tags only (.on-release equivalent)
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Create SCA_REPORT_DIR
         run: mkdir -p ${{ env.SCA_REPORT_DIR }}
 
       - name: Cache Trivy DB
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
@@ -404,7 +411,7 @@ jobs:
           exit-code: "0"
 
       - name: Upload SBOM to GitHub dependency graph
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sca-sbom
           path: ${{ env.SCA_REPORT_DIR }}/sbom.cdx.json
