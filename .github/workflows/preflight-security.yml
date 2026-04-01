@@ -124,7 +124,7 @@ jobs:
     timeout-minutes: 15
     needs: [preflight-secrets]
     permissions:
-      security-events: read
+      security-events: write
     container:
       image: semgrep/semgrep:1.108.0
     steps:
@@ -194,7 +194,7 @@ jobs:
     timeout-minutes: 10
     needs: [preflight-secrets]
     permissions:
-      security-events: read
+      security-events: write
     steps:
       - uses: actions/checkout@v6
 
@@ -231,7 +231,7 @@ jobs:
     timeout-minutes: 15
     needs: [preflight-secrets]
     permissions:
-      security-events: read
+      security-events: write
     steps:
       - uses: actions/checkout@v6
 
